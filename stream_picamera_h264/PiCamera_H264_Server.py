@@ -2,7 +2,9 @@
 # vuquangtrong.github.io
 
 import io
-import picamera
+import picamera2
+from picamera2.encoders import H264Encoder
+from picamera2.outputs import FileOutput
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from wsgiref.simple_server import make_server
@@ -29,10 +31,19 @@ class FrameBuffer(object):
 
 
 def stream():
-    with picamera.PiCamera(resolution='640x480', framerate=24) as camera:
+    #with picamera2.Picamera2(resolution='640x480', framerate=24) as camera:
+    with picamera2.Picamera2() as camera:
+        camera.configure(camera.create_video_configuration(main={"size": (640, 480)}))
         broadcasting = True
+        print ("camera configured")
         frame_buffer = FrameBuffer()
-        camera.start_recording(frame_buffer, format='h264', profile="baseline")
+        encoder = H264Encoder(qp=30)
+        encoder.output = FileOutput(frame_buffer.buffer)
+        print ("encoder configured")
+        #camera.capture_file(data, format='jpeg')
+        print ("camera start recording")
+        #camera.start_recording(encoder, )
+        camera.start()
         try:
             WebSocketWSGIHandler.http_version = '1.1'
             websocketd = make_server('', 9000, server_class=WSGIServer,
@@ -49,8 +60,10 @@ def stream():
                 httpd_thread.start()
                 while broadcasting:
                     with frame_buffer.condition:
-                        frame_buffer.condition.wait()
-                        websocketd.manager.broadcast(frame_buffer.frame, binary=True)
+                        #frame_buffer.condition.wait()
+                        #websocketd.manager.broadcast(frame_buffer.frame, binary=True)
+                        data = io.BytesIO()
+                        websocketd.manager.broadcast(data, binary=True)
             except KeyboardInterrupt:
                 pass
             finally:
